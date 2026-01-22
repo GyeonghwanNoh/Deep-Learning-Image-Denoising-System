@@ -71,13 +71,13 @@ matplotlib
 ```
 
 ## Sample Results
-<Noisy Image>
+Noisy Image
 <img width="772" height="459" alt="image" src="https://github.com/user-attachments/assets/ffad7d73-c162-47aa-9c88-bfbd1a147ff9" /> 
   
-<denoised >
+denoised
 <img width="771" height="457" alt="image" src="https://github.com/user-attachments/assets/a667e039-9169-4b78-8586-a03e0bae7285" />
   
-<Ground Truth> 
+Ground Truth 
 <img width="772" height="460" alt="image" src="https://github.com/user-attachments/assets/90a7b4d2-7049-4097-8dab-6c55d8755556" /> 
 
 
