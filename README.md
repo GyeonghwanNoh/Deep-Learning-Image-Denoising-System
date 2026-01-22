@@ -26,7 +26,7 @@ Built a deep learning-based denoising system achieving **11.4dB PSNR improvement
 - **Loss**: L1 Loss
 - **Optimizer**: Adam (lr=1e-4)
 - **Epochs**: 50
-- **Batch size**: 16
+- **Batch size**: 64
 
 ## Results
 
