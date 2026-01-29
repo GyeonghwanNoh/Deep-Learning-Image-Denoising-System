@@ -1,138 +1,230 @@
 import os
 import torch
+import torch.nn as nn
 import numpy as np
 from PIL import Image
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from model import DenoisingNet
 
 
+class DnCNN_Pretrained(nn.Module):
+    """KAIR Pretrained 모델용 (단순 Sequential 구조)"""
+    def __init__(self, in_nc=4, out_nc=3, nc=64, nb=17):
+        super(DnCNN_Pretrained, self).__init__()
+        layers = []
+        layers.append(nn.Conv2d(in_nc, nc, 3, 1, 1, bias=True))
+        layers.append(nn.ReLU(inplace=True))
+        for _ in range(nb - 2):
+            layers.append(nn.Conv2d(nc, nc, 3, 1, 1, bias=True))
+            layers.append(nn.ReLU(inplace=True))
+        layers.append(nn.Conv2d(nc, out_nc, 3, 1, 1, bias=True))
+        self.model = nn.Sequential(*layers)
+    
+    def forward(self, x):
+        return self.model(x)
+
+
 def calculate_psnr(img1, img2):
-    """PSNR 계산 (0-1 범위)"""
+    """PSNR 계산"""
     mse = np.mean((img1 - img2) ** 2)
     if mse == 0:
         return float('inf')
     return 20 * np.log10(1.0 / np.sqrt(mse))
 
 
-def test_image(model, img_path, noise_level=25, device='cpu'):
-    """단일 이미지 테스트"""
-    # 이미지 로드
-    img = Image.open(img_path).convert('RGB')
-    img_np = np.array(img).astype(np.float32) / 255.0
+def test_model_on_images(model, img_files, test_img_path, noise_level, device, use_noise_map=True, residual=False):
+    """모델로 이미지들 테스트하고 PSNR 리스트 반환"""
+    psnr_list = []
     
-    # 노이즈 추가
-    np.random.seed(0)
-    noise = np.random.randn(*img_np.shape) * (noise_level / 255.0)
-    noisy_np = np.clip(img_np + noise, 0, 1)
+    for img_file in img_files:
+        img_path = os.path.join(test_img_path, img_file)
+        
+        # 이미지 로드
+        img = Image.open(img_path).convert('RGB')
+        clean = np.array(img).astype(np.float32) / 255.0
+        
+        # 노이즈 추가
+        noise = np.random.randn(*clean.shape) * (noise_level / 255.0)
+        noisy = clean + noise
+        
+        # 텐서 변환
+        noisy_t = torch.from_numpy(noisy).permute(2, 0, 1).float()
+        
+        if use_noise_map:
+            # Noise map 추가 (Your model)
+            noise_map = torch.ones(1, *noisy_t.shape[1:]) * (noise_level / 255.0)
+            input_t = torch.cat([noisy_t, noise_map], dim=0).unsqueeze(0).to(device)
+        else:
+            # Noise map 없이 (Pretrained model)
+            input_t = noisy_t.unsqueeze(0).to(device)
+        
+        # 추론
+        with torch.no_grad():
+            model_output = model(input_t)[0].cpu().permute(1, 2, 0).numpy()
+        
+        # Residual learning: output이 noise이면 빼기
+        if residual:
+            output = noisy - model_output  # clean = noisy - noise
+        else:
+            output = model_output  # 직접 clean 출력
+        
+        # PSNR 계산
+        psnr = calculate_psnr(output, clean)
+        psnr_list.append(psnr)
     
-    # 텐서로 변환
-    clean_tensor = torch.from_numpy(img_np).permute(2, 0, 1).float()
-    noisy_tensor = torch.from_numpy(noisy_np).permute(2, 0, 1).float()
-    
-    # Noise level map 추가
-    noise_map = torch.ones(1, *noisy_tensor.shape[1:]) * (noise_level / 255.0)
-    noisy_with_map = torch.cat([noisy_tensor, noise_map], dim=0).unsqueeze(0).to(device)
-    
-    # Denoising
-    with torch.no_grad():
-        output = model(noisy_with_map)
-    
-    # 결과 변환
-    output_np = output[0].cpu().permute(1, 2, 0).numpy()
-    output_np = np.clip(output_np, 0, 1)
-    
-    # PSNR 계산
-    psnr_noisy = calculate_psnr(noisy_np, img_np)
-    psnr_output = calculate_psnr(output_np, img_np)
-    
-    return img_np, noisy_np, output_np, psnr_noisy, psnr_output
+    return psnr_list
 
 
-def test():
+def compare_models():
     # ========== 설정 ==========
-    model_path = './checkpoints/model_final.pth'
-    test_img_path = './DIV2K_train_HR'  # 테스트 이미지 폴더
+    model1_path = './checkpoints/dncnn_color_blind.pth'  # Pretrained
+    model2_path = './checkpoints/model_best.pth'         # Your model
+    test_img_path = './DIV2K_valid_HR'
     noise_level = 25
-    save_dir = './test_results'
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Using device: {device}\n")
+    print(f"Device: {device}\n")
     
-    # ========== 모델 로드 ==========
-    print("1. 모델 로딩 중...")
-    model = DenoisingNet().to(device)
-    
-    if not os.path.exists(model_path):
-        print(f"❌ 모델 파일이 없습니다: {model_path}")
-        print("   먼저 train.py를 실행하세요!")
-        return
-    
-    model.load_state_dict(torch.load(model_path, map_location=device))
-    model.eval()
-    print(f"✓ 모델 로드 완료: {model_path}\n")
-    
-    # ========== 테스트 ==========
-    os.makedirs(save_dir, exist_ok=True)
-    
-    # 테스트 이미지 목록 (751~800번)
+    # ========== 이미지 파일 로드 ==========
     all_files = sorted([f for f in os.listdir(test_img_path) if f.endswith('.png')])
-    img_files = all_files[750:800]  # 751~800번 이미지
     
-    if len(img_files) == 0:
+    if len(all_files) == 0:
         print(f"❌ 테스트 이미지가 없습니다: {test_img_path}")
         return
     
-    print(f"2. 테스트 시작 (총 {len(img_files)}장)\n")
+    print(f"테스트 이미지: {len(all_files)}개\n")
     
-    total_psnr_noisy = 0
-    total_psnr_output = 0
+    # ========== 모델 1 (Pretrained) ==========
+    print("[1] Pretrained Model (dncnn_color_blind.pth)")
+    if not os.path.exists(model1_path):
+        print(f"   ✗ 파일이 없습니다: {model1_path}\n")
+        psnr1_list = None
+    else:
+        model1 = DnCNN_Pretrained(in_nc=3, out_nc=3, nc=64, nb=20).to(device)
+        model1.load_state_dict(torch.load(model1_path, map_location=device))
+        model1.eval()
+        print("   모델 로드 완료")
+        print("   테스트 중...")
+        psnr1_list = test_model_on_images(model1, all_files, test_img_path, noise_level, device, use_noise_map=False, residual=True)
+        avg1 = np.mean(psnr1_list)
+        print(f"   평균 PSNR: {avg1:.2f} dB\n")
     
-    for idx, img_file in enumerate(img_files):
-        img_path = os.path.join(test_img_path, img_file)
-        print(f"[{idx+1}/{len(img_files)}] {img_file}")
+    # ========== 모델 2 (Your model) ==========
+    print("[2] Your Trained Model (model_best.pth)")
+    if not os.path.exists(model2_path):
+        print(f"   ✗ 파일이 없습니다: {model2_path}\n")
+        psnr2_list = None
+    else:
+        model2 = DenoisingNet().to(device)
+        model2.load_state_dict(torch.load(model2_path, map_location=device))
+        model2.eval()
+        print("   모델 로드 완료")
+        print("   테스트 중...")
+        psnr2_list = test_model_on_images(model2, all_files, test_img_path, noise_level, device)
+        avg2 = np.mean(psnr2_list)
+        print(f"   평균 PSNR: {avg2:.2f} dB\n")
+    
+    # ========== 비교 그래프 ==========
+    if psnr1_list and psnr2_list:
+        print("그래프 생성 중...")
         
-        # 테스트
-        clean, noisy, output, psnr_noisy, psnr_output = test_image(
-            model, img_path, noise_level, device
-        )
+        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
         
-        total_psnr_noisy += psnr_noisy
-        total_psnr_output += psnr_output
+        # 1. 막대 그래프 (평균 비교)
+        axes[0].bar(['Pretrained', 'Your Model'], [avg1, avg2], 
+                   color=['#3498db', '#e74c3c'], width=0.6)
+        axes[0].set_ylabel('Average PSNR (dB)', fontsize=12)
+        axes[0].set_title('Model Performance Comparison', fontsize=14)
+        axes[0].grid(True, alpha=0.3, axis='y')
         
-        print(f"   Noisy PSNR: {psnr_noisy:.2f} dB")
-        print(f"   Output PSNR: {psnr_output:.2f} dB")
-        print(f"   개선: {psnr_output - psnr_noisy:.2f} dB\n")
+        # 값 표시
+        axes[0].text(0, avg1 + 0.3, f'{avg1:.2f} dB', ha='center', fontsize=11)
+        axes[0].text(1, avg2 + 0.3, f'{avg2:.2f} dB', ha='center', fontsize=11)
         
-        # 결과 저장
-        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-        
-        axes[0].imshow(noisy)
-        axes[0].set_title(f"Noisy ({psnr_noisy:.2f} dB)")
-        axes[0].axis('off')
-        
-        axes[1].imshow(output)
-        axes[1].set_title(f"Denoised ({psnr_output:.2f} dB)")
-        axes[1].axis('off')
-        
-        axes[2].imshow(clean)
-        axes[2].set_title("Ground Truth")
-        axes[2].axis('off')
+        # 2. 선 그래프 (이미지별 비교)
+        x = range(1, len(psnr1_list) + 1)
+        axes[1].plot(x, psnr1_list, 'b-', linewidth=1.5, label='Pretrained', alpha=0.7)
+        axes[1].plot(x, psnr2_list, 'r-', linewidth=1.5, label='Your Model', alpha=0.7)
+        axes[1].set_xlabel('Image Index', fontsize=12)
+        axes[1].set_ylabel('PSNR (dB)', fontsize=12)
+        axes[1].set_title('Per-Image PSNR Comparison', fontsize=14)
+        axes[1].legend(fontsize=10)
+        axes[1].grid(True, alpha=0.3)
         
         plt.tight_layout()
-        plt.savefig(os.path.join(save_dir, f'{idx+1}_{img_file}'))
+        plt.savefig('./model_comparison.png', dpi=150)
         plt.close()
+        
+        print(f"✓ 그래프 저장: ./model_comparison.png\n")
+        
+        # ========== 결과 요약 ==========
+        print("=" * 60)
+        print("비교 결과")
+        print("=" * 60)
+        print(f"Pretrained:  {avg1:.2f} dB")
+        print(f"Your Model:  {avg2:.2f} dB")
+        print(f"차이:        {avg2 - avg1:+.2f} dB")
+        
+        if avg2 > avg1:
+            print(f"\n✓ Your model이 {avg2 - avg1:.2f} dB 더 좋습니다!")
+        elif avg2 < avg1:
+            print(f"\n✗ Pretrained가 {avg1 - avg2:.2f} dB 더 좋습니다.")
+        else:
+            print("\n= 두 모델 성능이 동일합니다.")
+        print("=" * 60)
+        print("=" * 60)
     
-    # ========== 결과 요약 ==========
-    avg_psnr_noisy = total_psnr_noisy / len(img_files)
-    avg_psnr_output = total_psnr_output / len(img_files)
-    
-    print("=" * 50)
-    print(f"평균 Noisy PSNR: {avg_psnr_noisy:.2f} dB")
-    print(f"평균 Output PSNR: {avg_psnr_output:.2f} dB")
-    print(f"평균 개선: {avg_psnr_output - avg_psnr_noisy:.2f} dB")
-    print("=" * 50)
-    print(f"\n✓ 결과 저장: {save_dir}/")
+    # # ========== 비교 그래프 (Pretrained 비교용) ==========
+    # if psnr1_list and psnr2_list:
+    #     print("그래프 생성 중...")
+    #     
+    #     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    #     
+    #     # 1. 막대 그래프 (평균 비교)
+    #     axes[0].bar(['Pretrained', 'Your Model'], [avg1, avg2], 
+    #                color=['#3498db', '#e74c3c'], width=0.6)
+    #     axes[0].set_ylabel('Average PSNR (dB)', fontsize=12)
+    #     axes[0].set_title('Model Performance Comparison', fontsize=14)
+    #     axes[0].grid(True, alpha=0.3, axis='y')
+    #     
+    #     # 값 표시
+    #     axes[0].text(0, avg1 + 0.3, f'{avg1:.2f} dB', ha='center', fontsize=11)
+    #     axes[0].text(1, avg2 + 0.3, f'{avg2:.2f} dB', ha='center', fontsize=11)
+    #     
+    #     # 2. 선 그래프 (이미지별 비교)
+    #     x = range(1, len(psnr1_list) + 1)
+    #     axes[1].plot(x, psnr1_list, 'b-', linewidth=1.5, label='Pretrained', alpha=0.7)
+    #     axes[1].plot(x, psnr2_list, 'r-', linewidth=1.5, label='Your Model', alpha=0.7)
+    #     axes[1].set_xlabel('Image Index', fontsize=12)
+    #     axes[1].set_ylabel('PSNR (dB)', fontsize=12)
+    #     axes[1].set_title('Per-Image PSNR Comparison', fontsize=14)
+    #     axes[1].legend(fontsize=10)
+    #     axes[1].grid(True, alpha=0.3)
+    #     
+    #     plt.tight_layout()
+    #     plt.savefig('./model_comparison.png', dpi=150)
+    #     plt.close()
+    #     
+    #     print(f"✓ 그래프 저장: ./model_comparison.png\n")
+    #     
+    #     # ========== 결과 요약 ==========
+    #     print("=" * 60)
+    #     print("비교 결과")
+    #     print("=" * 60)
+    #     print(f"Pretrained:  {avg1:.2f} dB")
+    #     print(f"Your Model:  {avg2:.2f} dB")
+    #     print(f"차이:        {avg2 - avg1:+.2f} dB")
+    #     
+    #     if avg2 > avg1:
+    #         print(f"\n✓ Your model이 {avg2 - avg1:.2f} dB 더 좋습니다!")
+    #     elif avg2 < avg1:
+    #         print(f"\n✗ Pretrained가 {avg1 - avg2:.2f} dB 더 좋습니다.")
+    #     else:
+    #         print("\n= 두 모델 성능이 동일합니다.")
+    #     print("=" * 60)
 
 
 if __name__ == "__main__":
-    test()
+    compare_models()

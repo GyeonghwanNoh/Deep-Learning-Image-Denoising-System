@@ -15,12 +15,13 @@ class DenoisingNet(nn.Module):
         # Head: 4채널 → 64채널
         m_head = [conv(4, n_feats, kernel_size)]
 
-        # Body: 16개 ResBlock
+        # Body: 16개 ResBlock + Conv
         m_body = [
             common.ResBlock(
                 conv, n_feats, kernel_size, act=act, res_scale=res_scale
             ) for _ in range(n_resblocks)
         ]
+        m_body.append(conv(n_feats, n_feats, kernel_size))  # EDSR 스타일 마지막 Conv
 
         # Tail: 64채널 → 3채널 (noise 예측)
         m_tail = [conv(n_feats, 3, kernel_size)]
@@ -35,10 +36,13 @@ class DenoisingNet(nn.Module):
         
         # Feature extraction
         feat = self.head(x)
-        feat = self.body(feat)
+        
+        # Body with Global Residual (EDSR style)
+        res = self.body(feat)
+        res += feat  # Global residual connection!
         
         # Noise 예측
-        noise = self.tail(feat)
+        noise = self.tail(res)
         
         # Denoising: y = x - noise
         denoised = x_rgb - noise
