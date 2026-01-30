@@ -46,10 +46,10 @@ class DIV2KDataset(Dataset):
         # 이미지 열기
         img = Image.open(f"{self.folder}/{self.files[idx]}")
         
-        # 랜덤 위치에서 64x64 패치 자르기
-        x = random.randint(0, img.width - 64)
-        y = random.randint(0, img.height - 64)
-        patch = img.crop((x, y, x + 64, y + 64))
+        # 랜덤 위치에서 40x40 패치 자르기 (DnCNN 표준)
+        x = random.randint(0, img.width - 40)
+        y = random.randint(0, img.height - 40)
+        patch = img.crop((x, y, x + 40, y + 40))
         
         # 텐서로 변환 (0~1 범위)
         patch_array = np.array(patch)
@@ -67,7 +67,7 @@ class DIV2KDataset(Dataset):
         noisy_tensor = clean_tensor + noise
         
         # Noise level map 생성 및 추가 (4채널)
-        noise_map = torch.ones(1, 64, 64) * (noise_level / 255.0)
+        noise_map = torch.ones(1, 40, 40) * (noise_level / 255.0)
         noisy_with_map = torch.cat([noisy_tensor, noise_map], dim=0)
         
         return noisy_with_map, clean_tensor

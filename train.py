@@ -54,10 +54,10 @@ def validate(model, val_folder, noise_level, device, num_samples=20):
 
 def train():
     # ========== 설정 ==========
-    num_epochs = 200
-    batch_size = 16
+    num_epochs = 500  # 200 → 500 (더 많은 iteration)
+    batch_size = 64   # 16 → 64 (DnCNN 표준)
     lr = 1e-4  # KAIR 설정
-    save_every = 10
+    save_every = 20   # 저장 주기 조정
     noise_level = 25
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -75,8 +75,8 @@ def train():
                                    betas=(0.9, 0.999))
     criterion = nn.MSELoss()  # MSE Loss
     
-    # MultiStepLR Scheduler (KAIR 방식)
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[80, 140, 180], gamma=0.5)
+    # MultiStepLR Scheduler (500 epoch 기준)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[200, 350, 450], gamma=0.5)
     
     print(f"Parameters: {sum(p.numel() for p in model.parameters()):,}\n")
     
