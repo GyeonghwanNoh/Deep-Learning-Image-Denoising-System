@@ -28,8 +28,8 @@ Built a deep learning-based denoising system using DnCNN with EDSR-style residua
 ## Dataset
 
 - **DIV2K**: 800 high-resolution images (2040×1356)
-- **Training**: Images 1-750
-- **Testing**: Images 751-800
+- **Training**: 800 images
+- **Validation**: 100 images (DIV2K val)
 
 ## Training Details
 
@@ -192,7 +192,7 @@ python train.py --lr 2e-4 --batch_size 8 --epochs 500
 
 Validation:
 
-python test.py
+python validate.py --sigma 25
 
 ## Limitations
 
