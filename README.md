@@ -2,6 +2,18 @@
 
 PyTorch implementation of image denoising using DnCNN architecture with EDSR-style residual blocks.
 
+Research conducted at GIST Intelligent Vision Lab (2026)
+
+## Research Question
+
+Can an EDSR-based noise-aware denoising model outperform pretrained DnCNN under controlled and fair validation settings?
+
+We investigate:
+- Hyperparameter sensitivity (LR, batch size)
+- Effectiveness of noise map conditioning
+- Convergence behavior over iterations
+- Parameter efficiency vs performance trade-off
+
 ## Project Overview
 
 Built a deep learning-based denoising system using DnCNN with EDSR-style residual blocks. See the **Results** and **Ablation** tables for quantitative performance.
@@ -144,6 +156,63 @@ python visualize_patches.py --input_dir test_results/patch_figures --out_dir tes
 ```
 
 > Adjust arguments to match your actual script options.
+
+## Baseline Definition
+
+Pretrained DnCNN:
+- ~200K training iterations
+- Official weights
+
+Our Model:
+- 50K iterations
+- Same validation set (DIV2K val 100)
+- Same noise generation seed
+- No clipping
+- PSNR averaged over 100 images
+
+## Noise Map Conditioning Analysis
+
+We evaluate PSNR by sweeping noise map value from σ=1 to 100 while fixing the true noise level.
+
+Observation:
+- PSNR peaks when noise map matches real noise level
+- Performance degrades under mismatch
+- Model partially relies on image-driven noise statistics
+
+## Reproducibility
+
+Environment:
+- PyTorch
+- CUDA
+- NVIDIA GPU
+
+Run:
+
+python train.py --lr 2e-4 --batch_size 8 --epochs 500
+
+Validation:
+
+python test.py
+
+## Limitations
+
+- Model not fully converged
+- FLOPs higher than DnCNN
+- No perceptual loss used
+- No blind denoising evaluation
+
+## Future Work
+
+- Longer training (100K+ iterations)
+- FLOPs-aware architecture design
+- Multi-task restoration extension
+- Diffusion-based denoising comparison
+
+## Parameter Count
+
+Parameter count measured by:
+
+sum(p.numel() for p in model.parameters())
 
 ## Author
 
