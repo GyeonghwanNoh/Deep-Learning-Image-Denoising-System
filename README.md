@@ -49,7 +49,7 @@ Built a deep learning-based denoising system using DnCNN with EDSR-style residua
 | Exp1 | 16 | 1e-4 | 0.1 | 120 | 6000 | 35.68 | 32.23 | 29.86 | 27.93 | 26.24 | 24.72 | 23.33 |
 | Exp2 | 8 | 1e-4 | 0.1 | 300 | 30000 | 36.36 | 32.71 | 30.25 | 28.26 | 26.52 | 24.95 | 23.51 |
 
-### LR 비교 (Batch=8, Res scale=0.1, Epoch=100, Iter=10000)
+### LR Comparison (Batch=8, Res scale=0.1, Epoch=100, Iter=10000)
 
 | LR | σ=10 | σ=20 | σ=30 | σ=40 | σ=50 | σ=60 | σ=70 |
 |----|------|------|------|------|------|------|------|
@@ -58,7 +58,7 @@ Built a deep learning-based denoising system using DnCNN with EDSR-style residua
 | 5e-4 | 36.09 | 32.53 | 30.12 | 28.16 | 26.46 | 24.93 | 23.53 |
 | 2e-4 | 36.18 | 32.59 | 30.15 | 28.17 | 26.44 | 24.89 | 23.47 |
 
-### Batch Size 비교 (LR=2e-4, Res scale=0.1, Iter=10000)
+### Batch Size Comparison (LR=2e-4, Res scale=0.1, Iter=10000)
 
 | Batch | Epoch | σ=10 | σ=20 | σ=30 | σ=40 | σ=50 | σ=60 | σ=70 |
 |------:|------:|------|------|------|------|------|------|------|
@@ -137,7 +137,7 @@ Add patch comparison figures here:
 
 Replace with your comparison images (noisy / denoised / ground truth).
 
-## visualize_patches.py 사용법
+## visualize_patches.py Usage
 
 ```bash
 python visualize_patches.py --input_dir test_results/patch_figures --out_dir test_results
