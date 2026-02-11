@@ -1,4 +1,5 @@
 import os
+import argparse
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -40,11 +41,11 @@ def validate(model, val_folder, noise_level, device, num_samples=20):
             
             # 텐서 변환
             noisy_t = torch.from_numpy(noisy).permute(2, 0, 1).float()
-            noise_map = torch.ones(1, *noisy_t.shape[1:]) * (noise_level / 255.0)
-            input_t = torch.cat([noisy_t, noise_map], dim=0).unsqueeze(0).to(device)
+            # noise_map = torch.ones(1, *noisy_t.shape[1:]) * (noise_level / 255.0)
+            # input_t = torch.cat([noisy_t, noise_map], dim=0).unsqueeze(0).to(device)
             
             # 추론
-            output = model(input_t)[0].cpu().permute(1, 2, 0).numpy()
+            output = model()[noisy].cpu().permute(1, 2, 0).numpy()
             
             # PSNR 계산
             total_psnr += calculate_psnr(output, clean)
@@ -54,10 +55,10 @@ def validate(model, val_folder, noise_level, device, num_samples=20):
 
 def train():
     # ========== 설정 ==========
-    num_epochs = 500  # 200 → 500 (더 많은 iteration)
-    batch_size = 64   # 16 → 64 (DnCNN 표준)
-    lr = 1e-4  # KAIR 설정
-    save_every = 20   # 저장 주기 조정
+    num_epochs = 1000  # 총 50000 iteration (800 images / 16 batch = 50 iter/epoch)
+    batch_size = 16
+    lr = 1e-3  # Adam과 함께 사용하는 안정적인 learning rate
+    save_every = 100
     noise_level = 25
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -71,12 +72,11 @@ def train():
     
     # 모델
     model = DenoisingNet().to(device)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=5e-4, 
-                                   betas=(0.9, 0.999))
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
     criterion = nn.MSELoss()  # MSE Loss
     
-    # MultiStepLR Scheduler (500 epoch 기준)
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[200, 350, 450], gamma=0.5)
+    # CosineAnnealingLR Scheduler (lr을 1e-3에서 0으로 cosine 형태로 부드럽게 감소)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=0)
     
     print(f"Parameters: {sum(p.numel() for p in model.parameters()):,}\n")
     
@@ -120,7 +120,7 @@ def train():
         val_psnr = validate(model, './DIV2K_valid_HR', noise_level, device)
         psnrs.append(val_psnr)
         
-        # Scheduler step (MultiStep)
+        # Scheduler step
         scheduler.step()
         current_lr = optimizer.param_groups[0]['lr']
         

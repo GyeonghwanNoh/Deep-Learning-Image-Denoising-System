@@ -1,4 +1,4 @@
-ï»¿import os
+import os
 import random
 from PIL import Image
 import torch
@@ -12,7 +12,7 @@ class DIV2KDataset(Dataset):
         self.augmentation = augmentation
         all_files = sorted([f for f in os.listdir(folder) if f.endswith('.png')])
         
-        # ì¸ë±ìŠ¤ ë²”ìœ„ ì§€ì •
+        # ÀÎµ¦½º ¹üÀ§ ÁöÁ¤
         if start_idx is not None or end_idx is not None:
             start_idx = start_idx if start_idx is not None else 0
             end_idx = end_idx if end_idx is not None else len(all_files)
@@ -24,18 +24,18 @@ class DIV2KDataset(Dataset):
         return len(self.files)
     
     def apply_augmentation(self, patch_tensor):
-        """ë°ì´í„° ì¦ê°• ì ìš© (clean ì´ë¯¸ì§€ë§Œ)"""
+        """µ¥ÀÌÅÍ Áõ°­ Àû¿ë (clean ÀÌ¹ÌÁö¸¸)"""
         # Shape: [3, 64, 64]
         
-        # 1. ì¢Œìš° ë°˜ì „ (50% í™•ë¥ )
+        # 1. ÁÂ¿ì ¹İÀü (50% È®·ü)
         if random.random() > 0.5:
             patch_tensor = torch.flip(patch_tensor, dims=[2])
         
-        # 2. ìƒí•˜ ë°˜ì „ (50% í™•ë¥ )
+        # 2. »óÇÏ ¹İÀü (50% È®·ü)
         if random.random() > 0.5:
             patch_tensor = torch.flip(patch_tensor, dims=[1])
         
-        # 3. 90ë„ íšŒì „ (0, 90, 180, 270ë„ ì¤‘ ëœë¤)
+        # 3. 90µµ È¸Àü (0, 90, 180, 270µµ Áß ·£´ı)
         k = random.randint(0, 3)
         if k > 0:
             patch_tensor = torch.rot90(patch_tensor, k, dims=[1, 2])
@@ -43,49 +43,49 @@ class DIV2KDataset(Dataset):
         return patch_tensor
     
     def __getitem__(self, idx):
-        # ì´ë¯¸ì§€ ì—´ê¸°
+        # ÀÌ¹ÌÁö ¿­±â
         img = Image.open(f"{self.folder}/{self.files[idx]}")
         
-        # ëœë¤ ìœ„ì¹˜ì—ì„œ 40x40 íŒ¨ì¹˜ ìë¥´ê¸° (DnCNN í‘œì¤€)
-        x = random.randint(0, img.width - 40)
-        y = random.randint(0, img.height - 40)
-        patch = img.crop((x, y, x + 40, y + 40))
+        # ·£´ı À§Ä¡¿¡¼­ 64x64 ÆĞÄ¡ ÀÚ¸£±â (DnCNN Ç¥ÁØ)
+        x = random.randint(0, img.width - 64)
+        y = random.randint(0, img.height - 64)
+        patch = img.crop((x, y, x + 64, y + 64))
         
-        # í…ì„œë¡œ ë³€í™˜ (0~1 ë²”ìœ„)
+        # ÅÙ¼­·Î º¯È¯ (0~1 ¹üÀ§)
         patch_array = np.array(patch)
         clean_tensor = torch.from_numpy(patch_array).permute(2, 0, 1).float() / 255.0
         
-        # ëœë¤ ë…¸ì´ì¦ˆ ë ˆë²¨ (5~60)
+        # ·£´ı ³ëÀÌÁî ·¹º§ (5~60)
         noise_level = random.uniform(5, 60)
         
-        # ë°ì´í„° ì¦ê°• ë¨¼ì € ì ìš© (clean ì´ë¯¸ì§€ë§Œ!)
+        # µ¥ÀÌÅÍ Áõ°­ ¸ÕÀú Àû¿ë (clean ÀÌ¹ÌÁö¸¸!)
         if self.augmentation:
             clean_tensor = self.apply_augmentation(clean_tensor)
         
-        # ê·¸ ë‹¤ìŒ ê°€ìš°ì‹œì•ˆ ë…¸ì´ì¦ˆ ì¶”ê°€ (augmentation í›„!)
+        # ±× ´ÙÀ½ °¡¿ì½Ã¾È ³ëÀÌÁî Ãß°¡ (augmentation ÈÄ!)
         noise = torch.randn_like(clean_tensor) * (noise_level / 255.0)
         noisy_tensor = clean_tensor + noise
         
-        # Noise level map ìƒì„± ë° ì¶”ê°€ (4ì±„ë„)
-        noise_map = torch.ones(1, 40, 40) * (noise_level / 255.0)
+        # Noise level map »ı¼º ¹× Ãß°¡ (4Ã¤³Î)
+        noise_map = torch.ones(1, 64, 64) * (noise_level / 255.0)
         noisy_with_map = torch.cat([noisy_tensor, noise_map], dim=0)
         
         return noisy_with_map, clean_tensor
 
 
-# # í…ŒìŠ¤íŠ¸ ì½”ë“œ
+# # Å×½ºÆ® ÄÚµå
 # if __name__ == "__main__":
 #     dataset = DIV2KDataset("./dncnn-denoising/DIV2K_train_HR")
-#     print(f"ì´ë¯¸ì§€ ê°œìˆ˜: {len(dataset)}")
+#     print(f"ÀÌ¹ÌÁö °³¼ö: {len(dataset)}")
     
 #     if len(dataset) > 0:
 #         patch = dataset[0]
-#         print(f"ì²« ë²ˆì§¸ íŒ¨ì¹˜ shape: {patch.shape}")
+#         print(f"Ã¹ ¹øÂ° ÆĞÄ¡ shape: {patch.shape}")
         
-#         # ì´ë¯¸ì§€ ë³´ê¸°
+#         # ÀÌ¹ÌÁö º¸±â
 #         import matplotlib.pyplot as plt
 #         plt.imshow(patch.permute(1, 2, 0))
 #         plt.title("First 64x64 Patch")
 #         plt.show()
 #     else:
-#         print("ì´ë¯¸ì§€ ì—†ìŒ!")
+#         print("ÀÌ¹ÌÁö ¾øÀ½!")

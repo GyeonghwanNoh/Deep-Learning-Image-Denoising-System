@@ -13,7 +13,8 @@ class DenoisingNet(nn.Module):
         res_scale = 0.1
 
         # Head: 4채널 → 64채널
-        m_head = [conv(4, n_feats, kernel_size)]
+        # m_head = [conv(4, n_feats, kernel_size)]
+        m_head = [conv(3, n_feats, kernel_size)]
 
         # Body: 16개 ResBlock + Conv
         m_body = [

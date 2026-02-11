@@ -13,7 +13,7 @@ def default_conv(in_channels, out_channels, kernel_size, bias=True):
 class ResBlock(nn.Module):
     def __init__(
         self, conv, n_feats, kernel_size,
-        bias=True, bn=False, act=nn.ReLU(True), res_scale=1):
+        bias=True, bn=False, act=nn.ReLU(True), res_scale=0.1):
 
         super(ResBlock, self).__init__()
         m = []

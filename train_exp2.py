@@ -57,7 +57,7 @@ def train():
     # ========== 설정 ==========
     os.environ['CUDA_VISIBLE_DEVICES'] = '1'
     num_epochs = 1000  # Long training experiment
-    batch_size = 64   # 16 → 64 (DnCNN 표준)
+    batch_size = 32   # Smaller batch for more gradient updates
     lr = 1e-4  # KAIR 설정
     save_every = 20   # 저장 주기 조정
     noise_level = 25
@@ -77,8 +77,8 @@ def train():
                                    betas=(0.9, 0.999))
     criterion = nn.MSELoss()  # MSE Loss
     
-    # MultiStepLR Scheduler (1000 epoch 기준)
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[400, 700, 900], gamma=0.5)
+    # CosineAnnealingLR Scheduler (smooth decay)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=1e-6)
     
     print(f"Parameters: {sum(p.numel() for p in model.parameters()):,}\n")
     

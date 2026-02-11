@@ -55,21 +55,18 @@ def validate(model, val_folder, noise_level, device, num_samples=20):
 
 def train():
     # ========== 설정 ==========
-    os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-    num_epochs = 500  # 200 → 500 (더 많은 iteration)
-    batch_size = 64   # 16 → 64 (DnCNN 표준)
-    lr = 1e-4  # KAIR 설정
-    save_every = 20   # 저장 주기 조정
+    num_epochs = 10
+    batch_size = 64
+    lr = 1e-4
+    save_every = 5
     noise_level = 25
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"[EXP1 - Baseline] Device: {device}\n")
     
     # 데이터 로드 (Augmentation ON)
     dataset = DIV2KDataset("./DIV2K_train_HR", start_idx=0, end_idx=800, augmentation=True)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, 
                        num_workers=4, pin_memory=True)
-    print(f"Images: {len(dataset)}, Batches: {len(loader)}\n")
     
     # 모델
     model = DenoisingNet().to(device)
@@ -77,10 +74,8 @@ def train():
                                    betas=(0.9, 0.999))
     criterion = nn.MSELoss()  # MSE Loss
     
-    # MultiStepLR Scheduler (500 epoch 기준)
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[200, 350, 450], gamma=0.5)
-    
-    print(f"Parameters: {sum(p.numel() for p in model.parameters()):,}\n")
+    # CosineAnnealingLR Scheduler (smooth decay)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=1e-6)
     
     # 학습
     os.makedirs('./checkpoints/exp1', exist_ok=True)
